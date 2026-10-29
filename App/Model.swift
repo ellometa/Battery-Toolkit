@@ -86,6 +86,18 @@ final class Model: ObservableObject {
         applyChimeMute()
     }
 
+    // launchd starts PowerChime on demand when power is attached (and `disable` doesn't stop that), so it has to be
+    // killed as it appears. Racy by nature: it plays only after it has checked the display is awake, which gives a window.
+    nonisolated func killChime(for seconds: Double) {
+        Task.detached {
+            let end = Date().addingTimeInterval(seconds)
+            while Date() < end {
+                for a in NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.PowerChime") { a.forceTerminate() }
+                try? await Task.sleep(nanoseconds: 15_000_000)
+            }
+        }
+    }
+
     private func save() {
         if let data = try? JSONEncoder().encode(settings) { try? data.write(to: Self.file) }
     }
@@ -96,6 +108,7 @@ final class Model: ObservableObject {
         let now = Power.isAC()
         guard now != plugged else { return }
         plugged = now
+        if settings.muteSystemChime { killChime(for: 5) }
         fire(now ? settings.onPlug : settings.onUnplug)
     }
 
@@ -143,12 +156,12 @@ final class Model: ObservableObject {
         _ = LED.set(0)
     }
 
-    // PowerChime is a per-user launch agent that SIP won't let us boot out, but `disable` is allowed and sticks across
-    // logins; killing it stops the current instance. Re-enabling and starting it again undoes this.
+    // PowerChime is a per-user launch agent that SIP won't let us boot out. `disable` keeps it from loading at login;
+    // `killChime` handles the on-demand launches. Re-enabling undoes it.
     func applyChimeMute() {
         let target = "gui/\(getuid())/com.apple.powerchime"
         let steps: [[String]] = settings.muteSystemChime
-            ? [["/bin/launchctl", "disable", target], ["/usr/bin/killall", "PowerChime"]]
+            ? [["/bin/launchctl", "disable", target], ["/usr/bin/killall", "-9", "PowerChime"]]
             : [["/bin/launchctl", "enable", target], ["/bin/launchctl", "kickstart", target]]
         for s in steps {
             let p = Process()
