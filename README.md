@@ -17,8 +17,7 @@ Needs the Xcode command line tools. No Xcode project.
 - **LED helper:** writing the SMC needs root. "Install" asks for your admin password once and installs a small
   launchd daemon (`/usr/local/libexec/magled daemon <uid>`). It listens on `/var/run/magled.sock` (mode 0600, owned by you)
   and accepts only the values 0-7 for the one `ACLC` key. "Remove" uninstalls it.
-- **Silence the built-in chime** sets `com.apple.PowerChime ChimeOnNoHardware`. The system chime file itself is on the sealed
-  system volume and is not modified.
+- **Silence the built-in chime** disables Apple's `com.apple.powerchime` launch agent for your user (`launchctl disable`, reversible from the app). The system chime file is on the sealed volume and is not modified. On by default.
 
 ## LED states (`ACLC`)
 

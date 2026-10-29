@@ -38,8 +38,12 @@ struct EventsView: View {
             Section("System") {
                 Toggle("Silence the built-in macOS charging chime", isOn: $model.settings.muteSystemChime)
                     .onChange(of: model.settings.muteSystemChime) { _, _ in model.applyChimeMute() }
-                Text("Best effort: sets the PowerChime preference. Turn on if you hear two sounds.")
+                Text("Disables Apple's PowerChime agent for your user (reversible: turn this off). Takes effect immediately.")
                     .font(.caption).foregroundStyle(.secondary)
+                Toggle("Play my sound on the built-in speakers", isOn: Binding(
+                    get: { model.settings.builtInSpeakers ?? true },
+                    set: { model.settings.builtInSpeakers = $0 }))
+                Text("Off = use whatever output is selected (headphones, Bluetooth).").font(.caption).foregroundStyle(.secondary)
                 Button("Restore system LED now") { model.restoreLED() }
             }
         }

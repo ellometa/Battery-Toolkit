@@ -42,7 +42,8 @@ struct Settings: Codable {
     var profiles: [Profile]
     var onPlug = EventConfig()
     var onUnplug = EventConfig(soundOn: false)
-    var muteSystemChime = false
+    var muteSystemChime = true
+    var builtInSpeakers: Bool? = true // nil/true = play on the built-in speakers even if headphones are the default output
 
     static func initial() -> Settings {
         let alt = Profile(name: "Orange / green", steps: [Step(value: 3, ms: 400), Step(value: 4, ms: 400)], loops: 5)
@@ -82,6 +83,7 @@ final class Model: ObservableObject {
         watcher = PowerWatcher { [weak self] in
             Task { @MainActor in self?.powerChanged() }
         }
+        applyChimeMute()
     }
 
     private func save() {
@@ -111,6 +113,7 @@ final class Model: ObservableObject {
             return
         }
         s.volume = Float(c.volume)
+        if settings.builtInSpeakers ?? true, let uid = Speakers.builtInUID() { s.playbackDeviceIdentifier = uid }
         sound?.stop()
         sound = s
         s.play()
@@ -140,14 +143,17 @@ final class Model: ObservableObject {
         _ = LED.set(0)
     }
 
+    // PowerChime is a per-user launch agent that SIP won't let us boot out, but `disable` is allowed and sticks across
+    // logins; killing it stops the current instance. Re-enabling and starting it again undoes this.
     func applyChimeMute() {
-        let on = settings.muteSystemChime
-        let args = on ? ["write", "com.apple.PowerChime", "ChimeOnNoHardware", "-bool", "true"]
-                      : ["delete", "com.apple.PowerChime", "ChimeOnNoHardware"]
-        for (tool, a) in [("/usr/bin/defaults", args), ("/usr/bin/killall", ["PowerChime"])] {
+        let target = "gui/\(getuid())/com.apple.powerchime"
+        let steps: [[String]] = settings.muteSystemChime
+            ? [["/bin/launchctl", "disable", target], ["/usr/bin/killall", "PowerChime"]]
+            : [["/bin/launchctl", "enable", target], ["/bin/launchctl", "kickstart", target]]
+        for s in steps {
             let p = Process()
-            p.executableURL = URL(fileURLWithPath: tool)
-            p.arguments = a
+            p.executableURL = URL(fileURLWithPath: s[0])
+            p.arguments = Array(s.dropFirst())
             p.standardError = FileHandle.nullDevice
             try? p.run()
             p.waitUntilExit()
